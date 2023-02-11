@@ -1,0 +1,242 @@
+homeassistant:
+  customize:
+    package.node_anchors:
+      customize: &customize
+
+####################################################
+#                                                  #
+#              IMPOSTAZIONI PACKAGE                #
+#                                                  #
+####################################################
+
+##TODO inserire i propri servizi di invio notifica alle app Home Assistant Companion collegate 
+      setting:
+        Device per notifica push 1: &push1 XXX
+        Device per notifica push 2: &push2 XXX
+
+####################################################
+#                                                  #
+#              NOTIFICHE GRUPPO                    #
+#                                                  #
+####################################################
+
+notify:
+  - name: gruppo push automazioni casa
+    platform: group
+    services:
+      - service: *push1
+      - service: *push2
+
+####################################################
+#                                                  #
+#               AUTOMAZIONI                        #
+#                                                  #
+####################################################  
+automation:
+  - alias: Automazioni luci accese
+    id: Automazioni luci accese
+    trigger:
+
+      - platform: template
+        value_template: "{{ (states.person.marco.state != 'home' and states.person.fede.state != 'home') }}"
+        id: nobody_in_home
+        for:
+          minutes: 1
+      - platform: template
+        value_template: "{{ (states.person.marco.state == 'home' or states.person.fede.state == 'home') }}"
+        id: someone_in_home
+        for:
+          minutes: 1
+      - platform: template
+        value_template: "{{ (states.light | selectattr('state','equalto','on') | list | length | default(0)) > 0 }}"
+        id: lights_on
+        for:
+          minutes: 1
+      - platform: template
+        value_template: "{{ (states.light | selectattr('state','equalto','on') | list | length | default(0)) == 0 }}"
+        id: lights_on
+        for:
+          minutes: 1
+    condition: []
+    action:
+
+
+####################################################
+# Nessuno a casa e luci accese
+
+      - choose:
+        - conditions:
+          - condition: template
+            value_template: "{{ (states.person.marco.state != 'home' and states.person.fede.state != 'home') }}"
+          - condition: template
+            value_template: "{{ (states.light | selectattr('state','equalto','on') | list | length | default(0)) > 0 }}"
+          sequence:
+          - service: notify.gruppo_push_automazioni_casa
+            data:
+              message: > 
+                🚨 In casa non c'è nessuno e ci sono luci accese ({{ (states.light | selectattr('state','equalto','on') | list | length | default(0)) }})
+                  {{ (states.light | selectattr('state','equalto','on')| map(attribute='name') | list | join (", ")) }}
+              title: '💡 Limita lo spreco 💡'
+              data:
+                notification_icon: "mdi:lightbulb"
+                actions:
+                  - action: "SWITCHOFF_LIGHTS"
+                    title: "Spegni le luci"
+                tag: "EmptyHomeLight"
+                alert_once: true
+
+####################################################
+# Elimina notifiche con luci spente
+
+        - conditions:
+          - condition: template
+            value_template: "{{ (states.light | selectattr('state','equalto','on') | list | length | default(0)) == 0 }}"
+          sequence:
+          - service: notify.gruppo_push_automazioni_casa
+            data:
+              message: "clear_notification"
+              data:
+                tag: "EmptyHomeLight"
+
+####################################################
+# Elimina notifiche con luci spente
+
+        - conditions:
+          - condition: trigger
+            id: someone_in_home
+          sequence:
+          - service: notify.gruppo_push_automazioni_casa
+            data:
+              message: "clear_notification"
+              data:
+                tag: "EmptyHome"
+          - service: notify.gruppo_push_automazioni_casa
+            data:
+              message: "clear_notification"
+              data:
+                tag: "EmptyHomeLight"
+
+####################################################
+# Nessuno a casa parte roomba
+
+      - choose:
+        - conditions:
+          - condition: trigger
+            id: nobody_in_home
+          
+          sequence:
+          - service: notify.gruppo_push_automazioni_casa
+            data:
+              message: > 
+               In casa non c'è più nessuno.
+              title: '👻 La casa è vuota'
+              data:
+                sticky: "true"
+                notification_icon: "mdi:robot-vacuum"
+                actions:
+                  - action: "START_ROOMBA" 
+                    title: "Roomba"
+                  - action: "COVER_DOWN_20" 
+                    title: "Tapparella(20%)"
+                  - action: "COVER_DOWN_50" 
+                    title: "Tapparella(50%)"
+                tag: "EmptyHome"
+                alert_once: true
+
+
+################################################################
+#                             Eventi
+################################################################
+
+  - alias: Eventi action notification
+    id: Eventi action notification
+    trigger:
+
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "SWITCHOFF_LIGHTS"
+        id: event_switchoff_lights
+
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "START_ROOMBA"
+        id: event_start_roomba
+
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "COVER_DOWN_20"
+        id: event_cover_down_20
+
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "COVER_DOWN_50"
+        id: event_cover_down_50
+
+    condition: []
+    action:
+
+####################################################
+# Evento SWITCHOFF_LIGHTS
+
+      - choose:
+        - conditions:
+          - condition: trigger
+            id: event_switchoff_lights
+          - condition: template
+            value_template: "{{ (states.light | selectattr('state','equalto','on') | list | length | default(0)) > 0 }}"
+
+          sequence:
+          - service: light.turn_off
+            data: {}
+            target:
+              entity_id: all
+
+
+####################################################
+# Evento START_ROOMBA
+
+      - choose:
+        - conditions:
+          - condition: trigger
+            id: event_start_roomba
+
+          sequence:
+          - service: vacuum.start
+            data:
+              entity_id: vacuum.xiaomi_vacuum_cleaner
+
+
+
+####################################################
+# Evento COVER_DOWN_20
+
+      - choose:
+        - conditions:
+          - condition: trigger
+            id: event_cover_down_20
+
+          sequence:
+          - service: cover.set_cover_position
+            data:
+              position: 20
+            target:
+              entity_id: cover.tapparellacucina
+
+####################################################
+# Evento COVER_DOWN_50
+
+      - choose:
+        - conditions:
+          - condition: trigger
+            id: event_cover_down_50
+
+          sequence:
+          - service: cover.set_cover_position
+            data:
+              position: 50
+            target:
+              entity_id: cover.tapparellacucina
