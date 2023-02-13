@@ -14,6 +14,19 @@ homeassistant:
         Device per notifica push 1: &push1 XXX
         Device per notifica push 2: &push2 XXX
 
+##TODO inserire il device vacuum da controllare tramite notifiche
+        Device Roomba: &roomba vacuum.xiaomi_vacuum_cleaner
+##TODO inserire il device tapparella da controllare tramite notifiche
+        Device Tapparella: &tapparella cover.tapparellacucina
+
+##TODO inserire le persone da monitorare 
+group:
+  homepersons:
+    name: persone di casa
+    entities:
+      - person.marco
+      - person.fede
+
 ####################################################
 #                                                  #
 #              NOTIFICHE GRUPPO                    #
@@ -38,12 +51,12 @@ automation:
     trigger:
 
       - platform: template
-        value_template: "{{ (states.person.marco.state != 'home' and states.person.fede.state != 'home') }}"
+        value_template: "{{ (group.homepersons.state != 'home') }}"
         id: nobody_in_home
         for:
           minutes: 1
       - platform: template
-        value_template: "{{ (states.person.marco.state == 'home' or states.person.fede.state == 'home') }}"
+        value_template: "{{ (group.homepersons.state == 'home') }}"
         id: someone_in_home
         for:
           minutes: 1
@@ -67,7 +80,7 @@ automation:
       - choose:
         - conditions:
           - condition: template
-            value_template: "{{ (states.person.marco.state != 'home' and states.person.fede.state != 'home') }}"
+            value_template: "{{ group.homepersons.state != 'home' }}"
           - condition: template
             value_template: "{{ (states.light | selectattr('state','equalto','on') | list | length | default(0)) > 0 }}"
           sequence:
@@ -80,7 +93,7 @@ automation:
               data:
                 notification_icon: "mdi:lightbulb"
                 actions:
-                  - action: "SWITCHOFF_LIGHTS"
+                  - action: "SWITCHOFF_LIGHTS" # The key you are sending for the event
                     title: "Spegni le luci"
                 tag: "EmptyHomeLight"
                 alert_once: true
@@ -207,7 +220,7 @@ automation:
           sequence:
           - service: vacuum.start
             data:
-              entity_id: vacuum.xiaomi_vacuum_cleaner
+              entity_id: *roomba
 
 
 
@@ -224,7 +237,7 @@ automation:
             data:
               position: 20
             target:
-              entity_id: cover.tapparellacucina
+              entity_id: *tapparella
 
 ####################################################
 # Evento COVER_DOWN_50
@@ -239,4 +252,4 @@ automation:
             data:
               position: 50
             target:
-              entity_id: cover.tapparellacucina
+              entity_id: *tapparella
